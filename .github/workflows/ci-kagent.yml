@@ -16,10 +16,26 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            wire_cmd: ./rust/target/debug/kagent
+          - runner: ubuntu-22.04-arm
+            wire_cmd: ./rust/target/debug/kagent
+          - runner: macos-14
+            wire_cmd: ./rust/target/debug/kagent
+          - runner: windows-2022
+            wire_cmd: .\\rust\\target\\debug\\kagent.exe
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install GNU Make (Windows)
+        if: runner.os == 'Windows'
+        run: choco install make -y
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -61,5 +77,5 @@ jobs:
       - name: Run e2e tests
         env:
           UV_PYTHON: ${{ steps.setup-python.outputs.python-path }}
-          KIMI_E2E_WIRE_CMD: ./rust/target/debug/kagent
+          KIMI_E2E_WIRE_CMD: ${{ matrix.wire_cmd }}
         run: uv run pytest tests_e2e
