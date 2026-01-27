@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::Arc;
 
 use tempfile::TempDir;
 
@@ -7,38 +7,117 @@ use kagent::skill::{
     Skill, SkillType, discover_skills, discover_skills_from_roots, find_user_skills_dir,
     get_builtin_skills_dir, resolve_skills_roots,
 };
-use kaos::KaosPath;
+use kaos::{
+    CurrentKaosToken, Kaos, KaosPath, KaosProcess, LineStream, LocalKaos, StrOrKaosPath,
+    reset_current_kaos, set_current_kaos, with_current_kaos_scope,
+};
 
-static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-struct EnvGuard {
-    key: &'static str,
-    prev: Option<String>,
+struct FixedHomeKaos {
+    inner: LocalKaos,
+    home: KaosPath,
 }
 
-impl EnvGuard {
-    fn set(key: &'static str, value: &str) -> Self {
-        let prev = std::env::var(key).ok();
-        // SAFETY: tests serialize env access via ENV_LOCK to avoid races.
-        unsafe {
-            std::env::set_var(key, value);
+impl FixedHomeKaos {
+    fn new(home: KaosPath) -> Self {
+        Self {
+            inner: LocalKaos::new(),
+            home,
         }
-        Self { key, prev }
     }
 }
 
-impl Drop for EnvGuard {
+#[async_trait::async_trait]
+impl Kaos for FixedHomeKaos {
+    fn name(&self) -> &str {
+        "local"
+    }
+
+    fn normpath(&self, path: &StrOrKaosPath<'_>) -> KaosPath {
+        self.inner.normpath(path)
+    }
+
+    fn home(&self) -> KaosPath {
+        self.home.clone()
+    }
+
+    fn cwd(&self) -> KaosPath {
+        self.inner.cwd()
+    }
+
+    async fn chdir(&self, path: &KaosPath) -> anyhow::Result<()> {
+        self.inner.chdir(path).await
+    }
+
+    async fn stat(
+        &self,
+        path: &KaosPath,
+        follow_symlinks: bool,
+    ) -> anyhow::Result<kaos::StatResult> {
+        self.inner.stat(path, follow_symlinks).await
+    }
+
+    async fn iterdir(&self, path: &KaosPath) -> anyhow::Result<Vec<KaosPath>> {
+        self.inner.iterdir(path).await
+    }
+
+    async fn glob(
+        &self,
+        path: &KaosPath,
+        pattern: &str,
+        case_sensitive: bool,
+    ) -> anyhow::Result<Vec<KaosPath>> {
+        self.inner.glob(path, pattern, case_sensitive).await
+    }
+
+    async fn read_bytes(&self, path: &KaosPath, limit: Option<usize>) -> anyhow::Result<Vec<u8>> {
+        self.inner.read_bytes(path, limit).await
+    }
+
+    async fn read_text(&self, path: &KaosPath) -> anyhow::Result<String> {
+        self.inner.read_text(path).await
+    }
+
+    async fn read_lines(&self, path: &KaosPath) -> anyhow::Result<Vec<String>> {
+        self.inner.read_lines(path).await
+    }
+
+    async fn read_lines_stream(&self, path: &KaosPath) -> anyhow::Result<LineStream> {
+        self.inner.read_lines_stream(path).await
+    }
+
+    async fn write_bytes(&self, path: &KaosPath, data: &[u8]) -> anyhow::Result<usize> {
+        self.inner.write_bytes(path, data).await
+    }
+
+    async fn write_text(&self, path: &KaosPath, data: &str, append: bool) -> anyhow::Result<usize> {
+        self.inner.write_text(path, data, append).await
+    }
+
+    async fn mkdir(&self, path: &KaosPath, parents: bool, exist_ok: bool) -> anyhow::Result<()> {
+        self.inner.mkdir(path, parents, exist_ok).await
+    }
+
+    async fn exec(&self, args: &[String]) -> anyhow::Result<Box<dyn KaosProcess>> {
+        self.inner.exec(args).await
+    }
+}
+
+struct FixedHomeKaosGuard {
+    token: Option<CurrentKaosToken>,
+}
+
+impl FixedHomeKaosGuard {
+    fn new(home: KaosPath) -> Self {
+        let kaos = Arc::new(FixedHomeKaos::new(home));
+        let token = set_current_kaos(kaos);
+        Self { token: Some(token) }
+    }
+}
+
+impl Drop for FixedHomeKaosGuard {
     fn drop(&mut self) {
-        if let Some(prev) = &self.prev {
-            // SAFETY: tests serialize env access via ENV_LOCK to avoid races.
-            unsafe {
-                std::env::set_var(self.key, prev);
-            }
-        } else {
-            // SAFETY: tests serialize env access via ENV_LOCK to avoid races.
-            unsafe {
-                std::env::remove_var(self.key);
-            }
+        if let Some(token) = self.token.take() {
+            reset_current_kaos(token);
         }
     }
 }
@@ -170,28 +249,30 @@ async fn test_discover_skills_from_roots_prefers_later_dirs() {
 
 #[tokio::test]
 async fn test_resolve_skills_roots_uses_layers() {
-    let _lock = ENV_LOCK.lock().unwrap();
-    let tmp = TempDir::new().expect("temp dir");
-    let home_dir = tmp.path().join("home");
-    let user_dir = home_dir.join(".config/agents/skills");
-    std::fs::create_dir_all(&user_dir).expect("create user skills dir");
-    let _home_guard = EnvGuard::set("HOME", home_dir.to_str().expect("home"));
-    let _profile_guard = EnvGuard::set("USERPROFILE", home_dir.to_str().expect("home"));
+    with_current_kaos_scope(async {
+        let tmp = TempDir::new().expect("temp dir");
+        let home_dir = tmp.path().join("home");
+        std::fs::create_dir_all(&home_dir).expect("create home dir");
+        let _kaos_guard = FixedHomeKaosGuard::new(KaosPath::unsafe_from_local_path(&home_dir));
+        let user_dir = home_dir.join(".config/agents/skills");
+        std::fs::create_dir_all(&user_dir).expect("create user skills dir");
 
-    let work_dir = tmp.path().join("project");
-    let project_dir = work_dir.join(".agents/skills");
-    std::fs::create_dir_all(&project_dir).expect("create project skills dir");
+        let work_dir = tmp.path().join("project");
+        let project_dir = work_dir.join(".agents/skills");
+        std::fs::create_dir_all(&project_dir).expect("create project skills dir");
 
-    let roots = resolve_skills_roots(&KaosPath::unsafe_from_local_path(&work_dir), None).await;
+        let roots = resolve_skills_roots(&KaosPath::unsafe_from_local_path(&work_dir), None).await;
 
-    assert_eq!(
-        roots,
-        vec![
-            KaosPath::unsafe_from_local_path(&get_builtin_skills_dir()),
-            KaosPath::unsafe_from_local_path(&user_dir),
-            KaosPath::unsafe_from_local_path(&project_dir),
-        ]
-    );
+        assert_eq!(
+            roots,
+            vec![
+                KaosPath::unsafe_from_local_path(&get_builtin_skills_dir()),
+                KaosPath::unsafe_from_local_path(&user_dir),
+                KaosPath::unsafe_from_local_path(&project_dir),
+            ]
+        );
+    })
+    .await;
 }
 
 #[tokio::test]
@@ -217,30 +298,34 @@ async fn test_resolve_skills_roots_respects_override() {
 
 #[tokio::test]
 async fn test_find_user_skills_dir_uses_agents_candidate() {
-    let _lock = ENV_LOCK.lock().unwrap();
-    let tmp = TempDir::new().expect("temp dir");
-    let home_dir = tmp.path().join("home");
-    let _home_guard = EnvGuard::set("HOME", home_dir.to_str().expect("home"));
-    let _profile_guard = EnvGuard::set("USERPROFILE", home_dir.to_str().expect("home"));
+    with_current_kaos_scope(async {
+        let tmp = TempDir::new().expect("temp dir");
+        let home_dir = tmp.path().join("home");
+        std::fs::create_dir_all(&home_dir).expect("create home dir");
+        let _kaos_guard = FixedHomeKaosGuard::new(KaosPath::unsafe_from_local_path(&home_dir));
 
-    let agents_dir = home_dir.join(".agents/skills");
-    std::fs::create_dir_all(&agents_dir).expect("create agents skills dir");
+        let agents_dir = home_dir.join(".agents/skills");
+        std::fs::create_dir_all(&agents_dir).expect("create agents skills dir");
 
-    let found = find_user_skills_dir().await.expect("user skills dir");
-    assert_eq!(found, KaosPath::unsafe_from_local_path(&agents_dir));
+        let found = find_user_skills_dir().await.expect("user skills dir");
+        assert_eq!(found, KaosPath::unsafe_from_local_path(&agents_dir));
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn test_find_user_skills_dir_uses_codex_candidate() {
-    let _lock = ENV_LOCK.lock().unwrap();
-    let tmp = TempDir::new().expect("temp dir");
-    let home_dir = tmp.path().join("home");
-    let _home_guard = EnvGuard::set("HOME", home_dir.to_str().expect("home"));
-    let _profile_guard = EnvGuard::set("USERPROFILE", home_dir.to_str().expect("home"));
+    with_current_kaos_scope(async {
+        let tmp = TempDir::new().expect("temp dir");
+        let home_dir = tmp.path().join("home");
+        std::fs::create_dir_all(&home_dir).expect("create home dir");
+        let _kaos_guard = FixedHomeKaosGuard::new(KaosPath::unsafe_from_local_path(&home_dir));
 
-    let codex_dir = home_dir.join(".codex/skills");
-    std::fs::create_dir_all(&codex_dir).expect("create codex skills dir");
+        let codex_dir = home_dir.join(".codex/skills");
+        std::fs::create_dir_all(&codex_dir).expect("create codex skills dir");
 
-    let found = find_user_skills_dir().await.expect("user skills dir");
-    assert_eq!(found, KaosPath::unsafe_from_local_path(&codex_dir));
+        let found = find_user_skills_dir().await.expect("user skills dir");
+        assert_eq!(found, KaosPath::unsafe_from_local_path(&codex_dir));
+    })
+    .await;
 }

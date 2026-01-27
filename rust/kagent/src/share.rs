@@ -1,8 +1,13 @@
 use std::path::PathBuf;
 
 pub fn get_share_dir() -> PathBuf {
+    if let Some(path) = std::env::var_os("KIMI_SHARE_DIR") {
+        if !path.is_empty() {
+            return PathBuf::from(path);
+        }
+    }
     dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
+        .expect("HOME directory is not available")
         .join(".kimi")
 }
 

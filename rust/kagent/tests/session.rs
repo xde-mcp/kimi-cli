@@ -49,9 +49,14 @@ impl Drop for EnvGuard {
 }
 
 fn set_home_env(path: &Path) -> Vec<EnvGuard> {
+    let share_dir = path.join(".kimi");
     vec![
         EnvGuard::set("HOME", path.to_str().expect("home path")),
         EnvGuard::set("USERPROFILE", path.to_str().expect("home path")),
+        EnvGuard::set(
+            "KIMI_SHARE_DIR",
+            share_dir.to_str().expect("share dir path"),
+        ),
     ]
 }
 

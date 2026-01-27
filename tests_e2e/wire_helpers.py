@@ -48,6 +48,7 @@ def make_env(home_dir: Path) -> dict[str, str]:
     env = os.environ.copy()
     env["HOME"] = str(home_dir)
     env["USERPROFILE"] = str(home_dir)
+    env["KIMI_SHARE_DIR"] = str(home_dir / ".kimi")
     return env
 
 
@@ -478,7 +479,7 @@ def _wire_base_command() -> list[str]:
     if override is not None:
         override = override.strip()
     if override:
-        return shlex.split(override)
+        return shlex.split(override, posix=os.name != "nt")
     return ["uv", "run", "kimi", "--wire"]
 
 

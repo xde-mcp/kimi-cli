@@ -95,8 +95,13 @@ async fn test_list_directory_windows() {
         .unwrap();
 
     let out = list_directory(&temp_path).await;
-    let mut lines: Vec<&str> = out.lines().collect();
-    lines.sort();
+    let mut lines: Vec<String> = out.lines().map(|line| line.to_string()).collect();
+    lines.sort_by_key(|line| {
+        line.split_whitespace()
+            .last()
+            .unwrap_or_default()
+            .to_string()
+    });
     let joined = lines.join("\n");
 
     assert_eq!(

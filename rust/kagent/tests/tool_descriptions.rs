@@ -11,14 +11,14 @@ use kagent::tools::web::{FetchURL, SearchWeb};
 use kosong::tooling::CallableTool2;
 use std::sync::Arc;
 
-use tool_test_utils::RuntimeFixture;
+use tool_test_utils::{RuntimeFixture, normalize_newlines};
 
 #[test]
 fn test_task_description() {
     let fixture = RuntimeFixture::new();
     let tool = TaskTool::new(&fixture.runtime);
     assert_eq!(
-        tool.description(),
+        normalize_newlines(tool.description()),
         "\
 Spawn a subagent to perform a specific task. Subagent will be spawned with a fresh context without any history of yours.\n\
 \n\
@@ -57,7 +57,7 @@ fn test_create_subagent_description() {
         &fixture.runtime,
     );
     assert_eq!(
-        tool.description(),
+        normalize_newlines(tool.description()),
         "\
 Create a custom subagent with specific system prompt and name for reuse.\n\
 \n\
@@ -78,7 +78,7 @@ fn test_send_dmail_description() {
     let fixture = RuntimeFixture::new();
     let tool = SendDMail::new(&fixture.runtime);
     assert_eq!(
-        tool.description(),
+        normalize_newlines(tool.description()),
         "\
 Send a message to the past, just like sending a D-Mail in Steins;Gate.\n\
 \n\
@@ -103,7 +103,7 @@ fn test_think_description() {
     let fixture = RuntimeFixture::new();
     let tool = Think::new(&fixture.runtime);
     assert_eq!(
-        tool.description(),
+        normalize_newlines(tool.description()),
         "Use the tool to think about something. It will not obtain new information or change the database, but just append the thought to the log. Use it when complex reasoning or some cache memory is needed.\n"
     );
 }
@@ -113,7 +113,7 @@ fn test_set_todo_list_description() {
     let fixture = RuntimeFixture::new();
     let tool = SetTodoList::new(&fixture.runtime);
     assert_eq!(
-        tool.description(),
+        normalize_newlines(tool.description()),
         "\
 Update the whole todo list.\n\
 \n\
@@ -139,7 +139,7 @@ fn test_shell_description() {
     let fixture = RuntimeFixture::new();
     let tool = Shell::new(&fixture.runtime);
     assert_eq!(
-        tool.description(),
+        normalize_newlines(tool.description()),
         "\
 Execute a bash (`/bin/bash`) command. Use this tool to explore the filesystem, edit files, run scripts, get system information, etc.\n\
 \n\
@@ -179,7 +179,7 @@ fn test_read_file_description() {
     let fixture = RuntimeFixture::new();
     let tool = ReadFile::new(&fixture.runtime);
     assert_eq!(
-        tool.description(),
+        normalize_newlines(tool.description()),
         "\
 Read text content from a file.\n\
 \n\
@@ -203,7 +203,7 @@ fn test_read_media_file_description() {
     let fixture = RuntimeFixture::new();
     let tool = ReadMediaFile::new(&fixture.runtime).expect("read media tool");
     assert_eq!(
-        tool.description(),
+        normalize_newlines(tool.description()),
         "\
 Read media content from a file.\n\
 \n\
@@ -227,7 +227,7 @@ fn test_glob_description() {
     let fixture = RuntimeFixture::new();
     let tool = Glob::new(&fixture.runtime);
     assert_eq!(
-        tool.description(),
+        normalize_newlines(tool.description()),
         "\
 Find files and directories using glob patterns. This tool supports standard glob syntax like `*`, `?`, and `**` for recursive searches.\n\
 \n\
@@ -254,7 +254,7 @@ fn test_grep_description() {
     let fixture = RuntimeFixture::new();
     let tool = Grep::new(&fixture.runtime);
     assert_eq!(
-        tool.description(),
+        normalize_newlines(tool.description()),
         "\
 A powerful search tool based-on ripgrep.\n\
 \n\
@@ -269,7 +269,7 @@ fn test_write_file_description() {
     let fixture = RuntimeFixture::new();
     let tool = WriteFile::new(&fixture.runtime);
     assert_eq!(
-        tool.description(),
+        normalize_newlines(tool.description()),
         "\
 Write content to a file.\n\
 \n\
@@ -284,7 +284,7 @@ fn test_str_replace_file_description() {
     let fixture = RuntimeFixture::new();
     let tool = StrReplaceFile::new(&fixture.runtime);
     assert_eq!(
-        tool.description(),
+        normalize_newlines(tool.description()),
         "\
 Replace specific strings within a specified file.\n\
 \n\
@@ -301,7 +301,7 @@ fn test_search_web_description() {
     let fixture = RuntimeFixture::new();
     let tool = SearchWeb::new(&fixture.runtime).expect("search web tool");
     assert_eq!(
-        tool.description(),
+        normalize_newlines(tool.description()),
         "WebSearch tool allows you to search on the internet to get latest information, including news, documents, release notes, blog posts, papers, etc.\n"
     );
 }
@@ -311,7 +311,7 @@ fn test_fetch_url_description() {
     let fixture = RuntimeFixture::new();
     let tool = FetchURL::new(&fixture.runtime);
     assert_eq!(
-        tool.description(),
+        normalize_newlines(tool.description()),
         "Fetch a web page from a URL and extract main text content from it.\n"
     );
 }
