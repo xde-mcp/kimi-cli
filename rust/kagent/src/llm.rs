@@ -228,6 +228,8 @@ pub fn derive_model_capabilities(model: &LLMModel) -> HashSet<ModelCapability> {
         capabilities.insert(ModelCapability::AlwaysThinking);
     } else if model.model == "kimi-for-coding" || model.model == "kimi-code" {
         capabilities.insert(ModelCapability::Thinking);
+        capabilities.insert(ModelCapability::ImageIn);
+        capabilities.insert(ModelCapability::VideoIn);
     }
     capabilities
 }

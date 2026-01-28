@@ -15,6 +15,7 @@ use crate::config::ModelCapability;
 use crate::llm::LLM;
 use crate::soul::agent::Runtime;
 use crate::tools::SkipThisTool;
+use crate::utils::wrap_media_part;
 
 use super::{
     FileKind, FileType, MAX_MEDIA_MEGABYTES, MEDIA_SNIFF_BYTES, READ_MEDIA_DESC, detect_file_type,
@@ -59,7 +60,8 @@ impl ReadMediaFile {
     }
 
     async fn read_media(&self, path: &KaosPath, file_type: &FileType) -> ToolReturnValue {
-        let media_id = path.to_string_lossy();
+        let media_path = path.to_string_lossy();
+        let attrs = [("path", Some(media_path.as_ref()))];
         let stat = match path.stat(true).await {
             Ok(stat) => stat,
             Err(err) => {
@@ -98,8 +100,8 @@ impl ReadMediaFile {
                     }
                 };
                 let data_url = to_data_url(&file_type.mime_type, &data);
-                let mut part = ImageURLPart::new(data_url);
-                part.image_url.id = Some(media_id.to_string());
+                let part = ImageURLPart::new(data_url);
+                let wrapped = wrap_media_part(ContentPart::from(part), "image", &attrs);
                 let image_size = extract_image_size(&data);
                 let size_hint = image_size
                     .map(|(w, h)| format!(", original size {w}x{h}px"))
@@ -109,7 +111,7 @@ impl ReadMediaFile {
                     "Loaded image file `{}` ({}, {} bytes{}).{}",
                     path, file_type.mime_type, size, size_hint, note
                 );
-                return tool_ok(ContentPart::from(part), message, "");
+                return tool_ok(wrapped, message, "");
             }
             FileKind::Video => {
                 let data = match path.read_bytes(None).await {
@@ -123,7 +125,7 @@ impl ReadMediaFile {
                     }
                 };
 
-                let mut video_part = if let Some(llm) = &self.llm {
+                let video_part = if let Some(llm) = &self.llm {
                     if let Some(kimi) = llm.chat_provider.as_any().downcast_ref::<Kimi>() {
                         match kimi
                             .files()
@@ -145,15 +147,14 @@ impl ReadMediaFile {
                 } else {
                     VideoURLPart::new(to_data_url(&file_type.mime_type, &data))
                 };
-                video_part.video_url.id = Some(media_id.to_string());
-                let part = ContentPart::from(video_part);
+                let wrapped = wrap_media_part(ContentPart::from(video_part), "video", &attrs);
 
                 let note = " If you need to output coordinates, output relative coordinates first and compute absolute coordinates using the original image size; if you generate or edit images/videos via commands or scripts, read the result back immediately before continuing.";
                 let message = format!(
                     "Loaded video file `{}` ({}, {} bytes).{}",
                     path, file_type.mime_type, size, note
                 );
-                return tool_ok(part, message, "");
+                return tool_ok(wrapped, message, "");
             }
             _ => {}
         }

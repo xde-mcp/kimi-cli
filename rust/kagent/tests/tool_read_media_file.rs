@@ -39,15 +39,18 @@ async fn test_read_image_file() {
         .await;
 
     assert!(!result.is_error);
-    let expected_id = image_file.to_string_lossy().to_string();
     let parts = parts_output(&result);
-    assert_eq!(parts.len(), 1);
-    match &parts[0] {
-        ContentPart::ImageUrl(part) => {
+    assert_eq!(parts.len(), 3);
+    match (&parts[0], &parts[1], &parts[2]) {
+        (ContentPart::Text(open), ContentPart::ImageUrl(part), ContentPart::Text(close)) => {
+            assert_eq!(
+                open.text,
+                format!("<image path=\"{}\">", image_file.to_string_lossy())
+            );
             assert!(part.image_url.url.starts_with("data:image/png;base64,"));
-            assert_eq!(part.image_url.id.as_deref(), Some(expected_id.as_str()));
+            assert_eq!(close.text, "</image>");
         }
-        _ => panic!("expected image part"),
+        _ => panic!("expected wrapped image part"),
     }
     assert_eq!(
         result.message,
@@ -81,15 +84,18 @@ async fn test_read_extensionless_image_file() {
         .await;
 
     assert!(!result.is_error);
-    let expected_id = image_file.to_string_lossy().to_string();
     let parts = parts_output(&result);
-    assert_eq!(parts.len(), 1);
-    match &parts[0] {
-        ContentPart::ImageUrl(part) => {
+    assert_eq!(parts.len(), 3);
+    match (&parts[0], &parts[1], &parts[2]) {
+        (ContentPart::Text(open), ContentPart::ImageUrl(part), ContentPart::Text(close)) => {
+            assert_eq!(
+                open.text,
+                format!("<image path=\"{}\">", image_file.to_string_lossy())
+            );
             assert!(part.image_url.url.starts_with("data:image/png;base64,"));
-            assert_eq!(part.image_url.id.as_deref(), Some(expected_id.as_str()));
+            assert_eq!(close.text, "</image>");
         }
-        _ => panic!("expected image part"),
+        _ => panic!("expected wrapped image part"),
     }
     assert_eq!(
         result.message,
@@ -154,15 +160,18 @@ async fn test_read_video_file() {
         .await;
 
     assert!(!result.is_error);
-    let expected_id = video_file.to_string_lossy().to_string();
     let parts = parts_output(&result);
-    assert_eq!(parts.len(), 1);
-    match &parts[0] {
-        ContentPart::VideoUrl(part) => {
+    assert_eq!(parts.len(), 3);
+    match (&parts[0], &parts[1], &parts[2]) {
+        (ContentPart::Text(open), ContentPart::VideoUrl(part), ContentPart::Text(close)) => {
+            assert_eq!(
+                open.text,
+                format!("<video path=\"{}\">", video_file.to_string_lossy())
+            );
             assert!(part.video_url.url.starts_with("data:video/mp4;base64,"));
-            assert_eq!(part.video_url.id.as_deref(), Some(expected_id.as_str()));
+            assert_eq!(close.text, "</video>");
         }
-        _ => panic!("expected video part"),
+        _ => panic!("expected wrapped video part"),
     }
     assert_eq!(
         result.message,

@@ -68,7 +68,7 @@ fn test_stringify_image_with_id() {
     let mut part = ImageURLPart::new("https://example.com/image.jpg");
     part.image_url.id = Some("img-1".to_string());
     let message = user_message(vec![part.into()]);
-    assert_eq!(message_stringify(&message), "[image:img-1]");
+    assert_eq!(message_stringify(&message), "[image]");
 }
 
 #[test]

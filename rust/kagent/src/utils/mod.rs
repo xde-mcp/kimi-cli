@@ -4,6 +4,7 @@ pub mod diff;
 pub mod environment;
 pub mod frontmatter;
 pub mod logging;
+pub mod media_tags;
 pub mod message;
 pub mod path;
 pub mod slashcmd;
@@ -15,6 +16,7 @@ pub use diff::{build_diff_blocks, format_unified_diff};
 pub use environment::Environment;
 pub use frontmatter::{parse_frontmatter, read_frontmatter};
 pub use logging::init_logging;
+pub use media_tags::wrap_media_part;
 pub use message::message_stringify;
 pub use path::{is_within_directory, list_directory, next_available_rotation, shorten_home};
 pub use slashcmd::{
